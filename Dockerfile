@@ -17,6 +17,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Ensure public folder exists
+RUN mkdir -p /app/public
+
 # Generate Prisma Client
 ENV PRISMA_CLI_QUERY_ENGINE_TYPE="binary"
 ENV PRISMA_CLIENT_ENGINE_TYPE="binary"
