@@ -1,0 +1,1090 @@
+"use client";
+
+import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
+import {
+  Shield,
+  Users,
+  Gift,
+  Music,
+  Plus,
+  Trash2,
+  Send,
+  AlertTriangle,
+  CheckCircle,
+  Copy,
+  Sparkles,
+  Upload,
+  Play,
+  RotateCcw,
+  Loader2,
+  AlertCircle,
+  ArrowLeft,
+} from "lucide-react";
+
+interface Member {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+interface Participant {
+  id: string;
+  status: string;
+  confirmedAt?: string;
+  user: Member;
+}
+
+interface Exclusion {
+  id: string;
+  userA: { id: string; name: string };
+  userB: { id: string; name: string };
+  reason?: string;
+}
+
+interface Exchange {
+  id: string;
+  name: string;
+  year: number;
+  budget: number;
+  currency: string;
+  exchangeDate: string;
+  status: string;
+  drawnAt?: string;
+  instructions?: string;
+  participants: Participant[];
+  exclusions: Exclusion[];
+}
+
+interface MusicTrack {
+  id: string;
+  title: string;
+  artist?: string;
+  category: string;
+  source: string;
+  filePath: string;
+}
+
+export default function AdminPage() {
+  const [loading, setLoading] = useState(true);
+  const [exchange, setExchange] = useState<Exchange | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [tracks, setTracks] = useState<MusicTrack[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // Invite form state
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
+
+  // New exchange form modal state
+  const [showExchangeModal, setShowExchangeModal] = useState(false);
+  const [newExName, setNewExName] = useState("Family Christmas Exchange");
+  const [newExYear, setNewExYear] = useState(new Date().getFullYear().toString());
+  const [newExBudget, setNewExBudget] = useState("30");
+  const [newExDate, setNewExDate] = useState(`${new Date().getFullYear()}-12-25`);
+  const [newExInstructions, setNewExInstructions] = useState("Please wrap your gift and label it for your recipient!");
+  const [creatingExchange, setCreatingExchange] = useState(false);
+
+  // Exclusion modal state
+  const [showExclusionModal, setShowExclusionModal] = useState(false);
+  const [userAId, setUserAId] = useState("");
+  const [userBId, setUserBId] = useState("");
+  const [exclusionReason, setExclusionReason] = useState("Spouse / Partner");
+  const [addingExclusion, setAddingExclusion] = useState(false);
+
+  // Drawing state
+  const [drawingLoading, setDrawingLoading] = useState(false);
+  const [showDrawConfirm, setShowDrawConfirm] = useState(false);
+
+  // Reset drawing modal state
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetConfirmCode, setResetConfirmCode] = useState("");
+  const [resetting, setResetting] = useState(false);
+
+  // Music upload state
+  const [showMusicModal, setShowMusicModal] = useState(false);
+  const [musicTitle, setMusicTitle] = useState("");
+  const [musicArtist, setMusicArtist] = useState("");
+  const [musicCategory, setMusicCategory] = useState("FESTIVE");
+  const [musicFile, setMusicFile] = useState<File | null>(null);
+  const [uploadingMusic, setUploadingMusic] = useState(false);
+
+  // Audio preview element
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);
+
+  const loadData = async () => {
+    try {
+      // 1. Fetch family details
+      const famRes = await fetch("/api/family");
+      const famData = await famRes.json();
+      const primaryMembership = famData.memberships?.[0];
+      const primaryGroup = primaryMembership?.familyGroup;
+
+      if (primaryGroup) {
+        const mems = primaryGroup.memberships.map((m: { user: Member }) => m.user);
+        setMembers(mems);
+
+        if (primaryGroup.exchanges && primaryGroup.exchanges.length > 0) {
+          setExchange(primaryGroup.exchanges[0]);
+        }
+      }
+
+      // 2. Fetch music tracks
+      const musRes = await fetch("/api/music");
+      if (musRes.ok) {
+        const musData = await musRes.json();
+        setTracks(musData);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load admin data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Send Family Invitation
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+
+    setInviting(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const famRes = await fetch("/api/family");
+      const famData = await famRes.json();
+      const groupId = famData.memberships?.[0]?.familyGroupId;
+
+      const res = await fetch("/api/family/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ familyGroupId: groupId, email: inviteEmail }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to invite");
+
+      setSuccess(`Invitation created for ${inviteEmail}!`);
+      setLastInviteLink(data.invite.inviteUrl);
+      setInviteEmail("");
+      loadData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to invite");
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  // Create New Exchange
+  const handleCreateExchange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingExchange(true);
+    setError(null);
+
+    try {
+      const famRes = await fetch("/api/family");
+      const famData = await famRes.json();
+      const groupId = famData.memberships?.[0]?.familyGroupId;
+
+      const res = await fetch("/api/exchange", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          familyGroupId: groupId,
+          name: newExName,
+          year: newExYear,
+          budget: newExBudget,
+          exchangeDate: newExDate,
+          instructions: newExInstructions,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create exchange");
+
+      setSuccess("New Christmas gift exchange created!");
+      setShowExchangeModal(false);
+      loadData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create exchange");
+    } finally {
+      setCreatingExchange(false);
+    }
+  };
+
+  // Add Exclusion
+  const handleAddExclusion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!exchange || !userAId || !userBId) return;
+
+    setAddingExclusion(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/exchange/${exchange.id}/exclusions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userAId, userBId, reason: exclusionReason }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to add exclusion");
+
+      setSuccess("Exclusion rule saved!");
+      setShowExclusionModal(false);
+      setUserAId("");
+      setUserBId("");
+      loadData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to add exclusion");
+    } finally {
+      setAddingExclusion(false);
+    }
+  };
+
+  // Delete Exclusion
+  const handleDeleteExclusion = async (ruleId: string) => {
+    if (!exchange) return;
+    try {
+      const res = await fetch(`/api/exchange/${exchange.id}/exclusions?ruleId=${ruleId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        loadData();
+      }
+    } catch {
+      // Error
+    }
+  };
+
+  // Start Drawing
+  const handleExecuteDrawing = async () => {
+    if (!exchange) return;
+    setDrawingLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await fetch(`/api/exchange/${exchange.id}/draw`, {
+        method: "POST",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to execute drawing");
+
+      setSuccess(data.message || "Names drawn successfully!");
+      setShowDrawConfirm(false);
+      loadData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Drawing failed");
+    } finally {
+      setDrawingLoading(false);
+    }
+  };
+
+  // Reset Drawing (Emergency Override)
+  const handleResetDrawing = async () => {
+    if (!exchange || resetConfirmCode !== "CONFIRM_RESET_DRAWING") return;
+    setResetting(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/exchange/${exchange.id}/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationText: resetConfirmCode }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to reset drawing");
+
+      setSuccess("Drawing has been reset safely.");
+      setShowResetModal(false);
+      setResetConfirmCode("");
+      loadData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Reset failed");
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  // Upload Music Track
+  const handleUploadMusic = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!musicFile || !musicTitle.trim()) return;
+
+    setUploadingMusic(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", musicFile);
+      formData.append("title", musicTitle);
+      formData.append("artist", musicArtist);
+      formData.append("category", musicCategory);
+
+      const res = await fetch("/api/music", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+
+      setSuccess(`Music track "${musicTitle}" uploaded successfully!`);
+      setShowMusicModal(false);
+      setMusicTitle("");
+      setMusicArtist("");
+      setMusicFile(null);
+      loadData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingMusic(false);
+    }
+  };
+
+  // Delete Music Track
+  const handleDeleteMusic = async (id: string) => {
+    try {
+      const res = await fetch(`/api/music?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setTracks((prev) => prev.filter((t) => t.id !== id));
+      }
+    } catch {
+      // Error
+    }
+  };
+
+  // Toggle track preview
+  const handleTogglePreview = (track: MusicTrack) => {
+    if (previewTrackId === track.id) {
+      if (previewAudioRef.current) previewAudioRef.current.pause();
+      setPreviewTrackId(null);
+    } else {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.src = track.filePath;
+        previewAudioRef.current.play();
+        setPreviewTrackId(track.id);
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-md mx-auto my-16 text-center text-[#f3c053] space-y-3">
+        <Loader2 className="w-8 h-8 animate-spin mx-auto text-[#d4af37]" />
+        <p>Loading Admin Dashboard...</p>
+      </div>
+    );
+  }
+
+  const confirmedCount = exchange?.participants.filter((p) => p.status === "CONFIRMED").length || 0;
+  const isReadyToDraw = confirmedCount >= 3 && exchange?.status !== "DRAWN" && exchange?.status !== "COMPLETED";
+
+  return (
+    <div className="space-y-8 py-4 sm:py-6 max-w-6xl mx-auto">
+      <audio ref={previewAudioRef} onEnded={() => setPreviewTrackId(null)} />
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#1d5943] pb-6">
+        <div>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center space-x-1.5 text-xs text-slate-300 hover:text-[#d4af37] transition mb-1"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Family Dashboard</span>
+          </Link>
+          <h1 className="text-3xl font-bold text-[#fef9ee] font-festive flex items-center space-x-2">
+            <Shield className="w-7 h-7 text-[#d4af37]" />
+            <span>Administrator Control Center</span>
+          </h1>
+          <p className="text-xs text-slate-300 mt-1">
+            Manage your family group, configure exclusions, draw names, and manage holiday music.
+          </p>
+        </div>
+
+        <button
+          onClick={() => setShowExchangeModal(true)}
+          className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-full bg-[#144534] hover:bg-[#1d5943] border border-[#d4af37]/40 text-[#f3c053] font-bold text-xs shadow"
+        >
+          <Plus className="w-4 h-4 text-[#d4af37]" />
+          <span>New Exchange Year</span>
+        </button>
+      </div>
+
+      {/* Notifications */}
+      {error && (
+        <div className="p-4 rounded-xl bg-red-950/70 border border-red-800 text-red-200 text-sm flex items-center space-x-2">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {success && (
+        <div className="p-4 rounded-xl bg-emerald-950/70 border border-emerald-800 text-emerald-200 text-sm flex items-center space-x-2">
+          <CheckCircle className="w-5 h-5 shrink-0 text-[#d4af37]" />
+          <span>{success}</span>
+        </div>
+      )}
+
+      {/* Top Stats Overview */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="festive-card p-4 rounded-xl border border-[#1d5943]">
+          <div className="text-xs text-slate-400">Total Members</div>
+          <div className="text-2xl font-bold text-[#fef9ee] mt-1">{members.length}</div>
+        </div>
+
+        <div className="festive-card p-4 rounded-xl border border-[#1d5943]">
+          <div className="text-xs text-slate-400">Confirmed for Drawing</div>
+          <div className="text-2xl font-bold text-emerald-300 mt-1">{confirmedCount}</div>
+        </div>
+
+        <div className="festive-card p-4 rounded-xl border border-[#1d5943]">
+          <div className="text-xs text-slate-400">Drawing Status</div>
+          <div className="text-sm font-bold text-[#f3c053] mt-2 uppercase">
+            {exchange?.status || "None"}
+          </div>
+        </div>
+
+        <div className="festive-card p-4 rounded-xl border border-[#1d5943]">
+          <div className="text-xs text-slate-400">Exclusion Rules</div>
+          <div className="text-2xl font-bold text-[#fef9ee] mt-1">
+            {exchange?.exclusions?.length || 0}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Exchange Control & Drawing Action */}
+      {exchange && (
+        <div className="festive-card p-6 sm:p-8 rounded-2xl border-2 border-[#d4af37]/40 space-y-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#1d5943] pb-4">
+            <div>
+              <span className="text-xs font-bold text-[#f3c053] uppercase tracking-wider">
+                Active Exchange &bull; Christmas {exchange.year}
+              </span>
+              <h2 className="text-2xl font-bold text-[#fef9ee] font-festive">{exchange.name}</h2>
+              <div className="text-xs text-slate-300 mt-1">
+                Budget: ${Number(exchange.budget).toFixed(2)} {exchange.currency} &bull; Date: {new Date(exchange.exchangeDate).toLocaleDateString()}
+              </div>
+            </div>
+
+            {/* Drawing Button */}
+            {exchange.status !== "DRAWN" && exchange.status !== "COMPLETED" ? (
+              <button
+                onClick={() => setShowDrawConfirm(true)}
+                disabled={!isReadyToDraw || drawingLoading}
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[#d4af37] hover:bg-[#f3c053] text-[#0b2b20] font-bold text-sm transition shadow-lg flex items-center justify-center space-x-2 disabled:opacity-50"
+              >
+                {drawingLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4" />
+                )}
+                <span>Start Secret Santa Drawing</span>
+              </button>
+            ) : (
+              <div className="flex items-center space-x-3">
+                <span className="px-3 py-1.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 text-xs font-bold">
+                  ✓ Drawing Finalized ({new Date(exchange.drawnAt || "").toLocaleDateString()})
+                </span>
+                <button
+                  onClick={() => setShowResetModal(true)}
+                  className="px-3 py-1.5 rounded-lg border border-red-800/80 hover:bg-red-950/40 text-red-300 text-xs font-semibold flex items-center space-x-1"
+                  title="Emergency reset of drawn assignments"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset Drawing</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {!isReadyToDraw && exchange.status !== "DRAWN" && (
+            <div className="p-4 rounded-xl bg-[#0b2b20] border border-[#1d5943] text-xs text-amber-300 flex items-center space-x-2">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <span>
+                At least 3 confirmed participants are required to run the drawing. Currently confirmed: {confirmedCount}.
+              </span>
+            </div>
+          )}
+
+          {/* Exclusions Section */}
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-[#fef9ee] font-festive">
+                  Exclusion Rules ({exchange.exclusions?.length || 0})
+                </h3>
+                <p className="text-xs text-slate-300">
+                  Prevent spouses, partners, or specific family members from drawing each other.
+                </p>
+              </div>
+
+              {exchange.status !== "DRAWN" && (
+                <button
+                  onClick={() => setShowExclusionModal(true)}
+                  className="px-3 py-1.5 rounded-lg bg-[#144534] hover:bg-[#1d5943] border border-[#d4af37]/40 text-xs text-[#f3c053] font-semibold flex items-center space-x-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Exclusion</span>
+                </button>
+              )}
+            </div>
+
+            {exchange.exclusions && exchange.exclusions.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {exchange.exclusions.map((ex) => (
+                  <div
+                    key={ex.id}
+                    className="p-3 rounded-xl bg-[#0b2b20]/70 border border-[#1d5943] flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="text-sm font-semibold text-slate-200">
+                        {ex.userA.name} &harr; {ex.userB.name}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {ex.reason || "Cannot draw each other"}
+                      </div>
+                    </div>
+
+                    {exchange.status !== "DRAWN" && (
+                      <button
+                        onClick={() => handleDeleteExclusion(ex.id)}
+                        className="p-1 text-slate-400 hover:text-red-400"
+                        title="Remove rule"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic">
+                No exclusions configured. Any participant can draw any other participant.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Family Member & Invitations Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Invite by Email */}
+        <div className="festive-card p-6 rounded-2xl space-y-4">
+          <div className="border-b border-[#1d5943] pb-3">
+            <h3 className="text-base font-bold text-[#fef9ee] font-festive flex items-center space-x-2">
+              <Send className="w-4 h-4 text-[#d4af37]" />
+              <span>Invite Family Member</span>
+            </h3>
+            <p className="text-xs text-slate-300">
+              Send an email invitation link to join this private family group.
+            </p>
+          </div>
+
+          <form onSubmit={handleInvite} className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="inviteEmail">
+                Family Member&apos;s Email
+              </label>
+              <input
+                id="inviteEmail"
+                type="email"
+                required
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="cousin@family.com"
+                className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100 placeholder-slate-500 focus:border-[#d4af37] focus:outline-none"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={inviting}
+              className="w-full py-2.5 rounded-xl bg-[#d4af37] hover:bg-[#f3c053] text-[#0b2b20] font-bold text-xs transition shadow flex items-center justify-center space-x-1.5 disabled:opacity-50"
+            >
+              {inviting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{inviting ? "Sending..." : "Create & Send Invitation"}</span>
+            </button>
+          </form>
+
+          {lastInviteLink && (
+            <div className="p-3 rounded-xl bg-[#0b2b20] border border-[#d4af37]/30 space-y-1">
+              <div className="text-[11px] text-[#f3c053] font-semibold">Shareable Invitation Link:</div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={lastInviteLink}
+                  className="w-full px-2 py-1 text-xs bg-[#144534] border border-[#1d5943] rounded text-slate-200 select-all"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(lastInviteLink);
+                    alert("Invite link copied to clipboard!");
+                  }}
+                  className="p-1.5 bg-[#d4af37] text-[#0b2b20] rounded hover:bg-[#f3c053]"
+                  title="Copy link"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Music Management */}
+        <div className="festive-card p-6 rounded-2xl space-y-4">
+          <div className="flex items-center justify-between border-b border-[#1d5943] pb-3">
+            <div>
+              <h3 className="text-base font-bold text-[#fef9ee] font-festive flex items-center space-x-2">
+                <Music className="w-4 h-4 text-[#d4af37]" />
+                <span>Christmas Music ({tracks.length})</span>
+              </h3>
+              <p className="text-xs text-slate-300">Upload custom MP3/OGG/WAV tracks</p>
+            </div>
+
+            <button
+              onClick={() => setShowMusicModal(true)}
+              className="px-3 py-1.5 rounded-lg bg-[#144534] hover:bg-[#1d5943] border border-[#d4af37]/40 text-xs text-[#f3c053] font-semibold flex items-center space-x-1"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Upload Track</span>
+            </button>
+          </div>
+
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            {tracks.map((t) => (
+              <div
+                key={t.id}
+                className="p-2.5 rounded-xl bg-[#0b2b20]/70 border border-[#1d5943] flex items-center justify-between"
+              >
+                <div className="flex items-center space-x-2 truncate">
+                  <button
+                    onClick={() => handleTogglePreview(t)}
+                    className="p-1.5 rounded-full bg-[#144534] text-[#d4af37] hover:bg-[#1d5943]"
+                    title="Preview Track"
+                  >
+                    <Play className="w-3 h-3" />
+                  </button>
+                  <div className="truncate">
+                    <div className="text-xs font-semibold text-slate-200 truncate">{t.title}</div>
+                    <div className="text-[10px] text-[#f3c053]">{t.category} &bull; {t.source}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleDeleteMusic(t.id)}
+                    className="p-1 text-slate-400 hover:text-red-400"
+                    title="Delete track"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* MODAL: Confirm Drawing */}
+      {showDrawConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="festive-card max-w-md w-full p-6 rounded-2xl border-2 border-[#d4af37] shadow-2xl space-y-4">
+            <div className="text-center space-y-2">
+              <div className="text-4xl">🎅 ✨ 🎁</div>
+              <h3 className="text-xl font-bold text-[#fef9ee] font-festive">
+                Confirm Secret Santa Drawing
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                You are about to randomly draw Secret Santa assignments for <strong>{confirmedCount} participants</strong>.
+                All configured exclusions will be strictly honored. Once drawn, assignments are final and notifications will be dispatched.
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-4 border-t border-[#1d5943]">
+              <button
+                type="button"
+                onClick={() => setShowDrawConfirm(false)}
+                className="px-4 py-2 rounded-lg border border-[#1d5943] text-xs text-slate-300 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteDrawing}
+                disabled={drawingLoading}
+                className="px-6 py-2 rounded-lg bg-[#d4af37] hover:bg-[#f3c053] text-[#0b2b20] font-bold text-xs shadow flex items-center space-x-1.5"
+              >
+                {drawingLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{drawingLoading ? "Drawing Names..." : "Yes, Draw Names Now!"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Emergency Reset Drawing */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="festive-card max-w-md w-full p-6 rounded-2xl border-2 border-red-700 shadow-2xl space-y-4">
+            <div className="text-center space-y-2">
+              <AlertTriangle className="w-10 h-10 text-red-400 mx-auto" />
+              <h3 className="text-xl font-bold text-red-200 font-festive">
+                Reset Secret Santa Drawing?
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                <strong>Warning:</strong> Resetting will delete all current secret assignments and allow you to re-draw.
+                Family members who have already seen their recipient may get assigned someone new.
+              </p>
+              <p className="text-xs text-amber-300 font-mono">
+                Type <strong>CONFIRM_RESET_DRAWING</strong> below to proceed:
+              </p>
+            </div>
+
+            <input
+              type="text"
+              value={resetConfirmCode}
+              onChange={(e) => setResetConfirmCode(e.target.value)}
+              placeholder="CONFIRM_RESET_DRAWING"
+              className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-red-800 text-sm text-center text-slate-100 font-mono focus:outline-none"
+            />
+
+            <div className="flex justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResetModal(false);
+                  setResetConfirmCode("");
+                }}
+                className="px-4 py-2 rounded-lg border border-[#1d5943] text-xs text-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleResetDrawing}
+                disabled={resetConfirmCode !== "CONFIRM_RESET_DRAWING" || resetting}
+                className="px-6 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white font-bold text-xs disabled:opacity-40"
+              >
+                {resetting ? "Resetting..." : "Confirm Reset"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Add Exclusion */}
+      {showExclusionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="festive-card max-w-md w-full p-6 rounded-2xl border-2 border-[#d4af37]/40 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#1d5943] pb-3">
+              <h3 className="text-lg font-bold text-[#fef9ee] font-festive">Add Exclusion Rule</h3>
+              <button
+                onClick={() => setShowExclusionModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleAddExclusion} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="userASelect">
+                  Participant 1
+                </label>
+                <select
+                  id="userASelect"
+                  required
+                  value={userAId}
+                  onChange={(e) => setUserAId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
+                >
+                  <option value="">Select participant...</option>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="userBSelect">
+                  Participant 2 (Cannot draw each other)
+                </label>
+                <select
+                  id="userBSelect"
+                  required
+                  value={userBId}
+                  onChange={(e) => setUserBId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
+                >
+                  <option value="">Select participant...</option>
+                  {members
+                    .filter((m) => m.id !== userAId)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.email})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="exReasonInput">
+                  Reason (Optional)
+                </label>
+                <input
+                  id="exReasonInput"
+                  type="text"
+                  value={exclusionReason}
+                  onChange={(e) => setExclusionReason(e.target.value)}
+                  placeholder="Spouse / Partner / Lives together"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-[#1d5943]">
+                <button
+                  type="button"
+                  onClick={() => setShowExclusionModal(false)}
+                  className="px-4 py-2 rounded-lg border border-[#1d5943] text-xs text-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addingExclusion}
+                  className="px-6 py-2 rounded-lg bg-[#d4af37] hover:bg-[#f3c053] text-[#0b2b20] font-bold text-xs"
+                >
+                  {addingExclusion ? "Saving..." : "Save Rule"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Create New Exchange */}
+      {showExchangeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="festive-card max-w-lg w-full p-6 rounded-2xl border-2 border-[#d4af37]/40 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#1d5943] pb-3">
+              <h3 className="text-lg font-bold text-[#fef9ee] font-festive">
+                Create New Christmas Exchange
+              </h3>
+              <button
+                onClick={() => setShowExchangeModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateExchange} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="exNameInput">
+                  Exchange Name
+                </label>
+                <input
+                  id="exNameInput"
+                  type="text"
+                  required
+                  value={newExName}
+                  onChange={(e) => setNewExName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="exYearInput">
+                    Christmas Year
+                  </label>
+                  <input
+                    id="exYearInput"
+                    type="number"
+                    required
+                    value={newExYear}
+                    onChange={(e) => setNewExYear(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="exBudgetInput">
+                    Budget ($)
+                  </label>
+                  <input
+                    id="exBudgetInput"
+                    type="number"
+                    step="0.01"
+                    required
+                    value={newExBudget}
+                    onChange={(e) => setNewExBudget(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="exDateInput">
+                  Exchange Date
+                </label>
+                <input
+                  id="exDateInput"
+                  type="date"
+                  required
+                  value={newExDate}
+                  onChange={(e) => setNewExDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="exInstructionsInput">
+                  Special Instructions
+                </label>
+                <textarea
+                  id="exInstructionsInput"
+                  rows={2}
+                  value={newExInstructions}
+                  onChange={(e) => setNewExInstructions(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-[#1d5943]">
+                <button
+                  type="button"
+                  onClick={() => setShowExchangeModal(false)}
+                  className="px-4 py-2 rounded-lg border border-[#1d5943] text-xs text-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingExchange}
+                  className="px-6 py-2 rounded-lg bg-[#d4af37] hover:bg-[#f3c053] text-[#0b2b20] font-bold text-xs"
+                >
+                  {creatingExchange ? "Creating..." : "Create Exchange"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Upload Music */}
+      {showMusicModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="festive-card max-w-md w-full p-6 rounded-2xl border-2 border-[#d4af37]/40 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#1d5943] pb-3">
+              <h3 className="text-lg font-bold text-[#fef9ee] font-festive">Upload Holiday Music</h3>
+              <button
+                onClick={() => setShowMusicModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleUploadMusic} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="musicTitleInput">
+                  Track Title *
+                </label>
+                <input
+                  id="musicTitleInput"
+                  type="text"
+                  required
+                  value={musicTitle}
+                  onChange={(e) => setMusicTitle(e.target.value)}
+                  placeholder="Joy to the World"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="musicArtistInput">
+                  Artist / Orchestra (Optional)
+                </label>
+                <input
+                  id="musicArtistInput"
+                  type="text"
+                  value={musicArtist}
+                  onChange={(e) => setMusicArtist(e.target.value)}
+                  placeholder="Family Choir"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="musicCategorySelect">
+                  Category
+                </label>
+                <select
+                  id="musicCategorySelect"
+                  value={musicCategory}
+                  onChange={(e) => setMusicCategory(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
+                >
+                  <option value="FESTIVE">Festive Christmas</option>
+                  <option value="CLASSIC">Classic Carols</option>
+                  <option value="INSTRUMENTAL">Instrumental Christmas</option>
+                  <option value="PEACEFUL">Peaceful Winter</option>
+                  <option value="CUSTOM">Custom Family Music</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="audioFileInput">
+                  Audio File (.mp3, .ogg, .wav &bull; max 15MB) *
+                </label>
+                <input
+                  id="audioFileInput"
+                  type="file"
+                  required
+                  accept="audio/mpeg,audio/ogg,audio/wav"
+                  onChange={(e) => setMusicFile(e.target.files?.[0] || null)}
+                  className="w-full px-2 py-1 text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#144534] file:text-[#d4af37] hover:file:bg-[#1d5943]"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-[#1d5943]">
+                <button
+                  type="button"
+                  onClick={() => setShowMusicModal(false)}
+                  className="px-4 py-2 rounded-lg border border-[#1d5943] text-xs text-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadingMusic}
+                  className="px-6 py-2 rounded-lg bg-[#d4af37] hover:bg-[#f3c053] text-[#0b2b20] font-bold text-xs"
+                >
+                  {uploadingMusic ? "Uploading..." : "Upload & Save Track"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
