@@ -7,7 +7,7 @@ services:
     container_name: christmas_app
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3001}:3000"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-christmas_secret_pass}@db:5432/${POSTGRES_DB:-christmas_together}?schema=public
