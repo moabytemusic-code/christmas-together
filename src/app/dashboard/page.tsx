@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { Gift, Calendar, DollarSign, Users, Sparkles, CheckCircle2, XCircle, Heart, ArrowRight } from "lucide-react";
 import { ParticipationButtons } from "./ParticipationButtons";
+import { FamilyDirectory } from "./FamilyDirectory";
 
 export default async function DashboardPage() {
   const session = await getSession();
@@ -246,66 +247,28 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Family Directory Section */}
+      {/* Family & Confirmed Participants Directory */}
       {primaryGroup && (
-        <div className="festive-card p-6 rounded-2xl space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-[#fef9ee] font-festive flex items-center space-x-2">
-              <Users className="w-5 h-5 text-[#d4af37]" />
-              <span>Family Members ({primaryGroup.memberships.length})</span>
-            </h3>
-            {session.role === "ADMIN" && (
-              <Link
-                href="/admin"
-                className="text-xs text-[#f3c053] hover:text-[#d4af37] font-semibold"
-              >
-                + Invite Members
-              </Link>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {primaryGroup.memberships.map((m) => {
-              const participant = currentExchange?.participants.find(
-                (p) => p.userId === m.user.id
-              );
-              return (
-                <div
-                  key={m.user.id}
-                  className="p-3 rounded-xl bg-[#0b2b20]/60 border border-[#1d5943] flex items-center justify-between"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <div className="w-8 h-8 rounded-full bg-[#144534] border border-[#d4af37]/60 flex items-center justify-center text-xs font-bold text-[#d4af37]">
-                      {m.user.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-slate-200">
-                        {m.user.name} {m.user.id === session.id && "(You)"}
-                      </div>
-                      <div className="text-[11px] text-slate-400 capitalize">
-                        {m.role.toLowerCase()}
-                      </div>
-                    </div>
-                  </div>
-
-                  {currentExchange && (
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                        participant?.status === "CONFIRMED"
-                          ? "bg-emerald-950/80 text-emerald-300 border border-emerald-800"
-                          : participant?.status === "DECLINED"
-                          ? "bg-red-950/80 text-red-300 border border-red-800"
-                          : "bg-amber-950/80 text-amber-300 border border-amber-800"
-                      }`}
-                    >
-                      {participant?.status || "Invited"}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <FamilyDirectory
+          memberships={primaryGroup.memberships.map((m) => ({
+            role: m.role,
+            user: {
+              id: m.user.id,
+              name: m.user.name,
+              email: m.user.email,
+              role: m.user.role,
+            },
+          }))}
+          participants={
+            currentExchange?.participants.map((p) => ({
+              userId: p.userId,
+              status: p.status,
+            })) || []
+          }
+          hasExchange={!!currentExchange}
+          isAdmin={session.role === "ADMIN"}
+          currentUserId={session.id}
+        />
       )}
     </div>
   );

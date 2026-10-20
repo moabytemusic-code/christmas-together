@@ -943,7 +943,10 @@ export default function AdminPage() {
                   className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
                 >
                   <option value="">Select participant...</option>
-                  {members.map((m) => (
+                  {(exchange?.participants && exchange.participants.length > 0
+                    ? members.filter((m) => exchange.participants.some((p) => p.user.id === m.id && p.status === "CONFIRMED"))
+                    : members
+                  ).map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name} ({m.email})
                     </option>
@@ -963,7 +966,10 @@ export default function AdminPage() {
                   className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
                 >
                   <option value="">Select participant...</option>
-                  {members
+                  {(exchange?.participants && exchange.participants.length > 0
+                    ? members.filter((m) => exchange.participants.some((p) => p.user.id === m.id && p.status === "CONFIRMED"))
+                    : members
+                  )
                     .filter((m) => m.id !== userAId)
                     .map((m) => (
                       <option key={m.id} value={m.id}>
