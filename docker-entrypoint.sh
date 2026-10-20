@@ -19,7 +19,8 @@ if [ -n "$DATABASE_URL" ]; then
   # Run idempotent schema initialization
   if [ -f "/app/prisma/init.sql" ]; then
     echo "📦 Ensuring database schema is up-to-date (prisma/init.sql)..."
-    DB_URL_CLEAN=$(echo "$DATABASE_URL" | sed 's/\?.*//')
+    DB_URL_CLEAN="${DATABASE_URL%%\?*}"
+    echo "Connecting to PostgreSQL database..."
     psql "$DB_URL_CLEAN" -f /app/prisma/init.sql || echo "⚠️ Notice: SQL init finished with notices."
   fi
 
