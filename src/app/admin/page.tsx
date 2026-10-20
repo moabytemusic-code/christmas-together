@@ -523,7 +523,7 @@ export default function AdminPage() {
       </div>
 
       {/* Main Exchange Control & Drawing Action */}
-      {exchange && (
+      {exchange ? (
         <div className="festive-card p-6 sm:p-8 rounded-2xl border-2 border-[#d4af37]/40 space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#1d5943] pb-4">
             <div>
@@ -643,6 +643,21 @@ export default function AdminPage() {
               </p>
             )}
           </div>
+        </div>
+      ) : (
+        <div className="festive-card p-8 rounded-2xl text-center space-y-4 border-2 border-dashed border-[#1d5943]">
+          <div className="text-4xl">🎄</div>
+          <h3 className="text-xl font-bold text-[#fef9ee] font-festive">No Active Christmas Exchange</h3>
+          <p className="text-sm text-slate-300 max-w-md mx-auto">
+            You don&apos;t have an exchange scheduled yet for your family. Create one to begin inviting participants, configuring gift budgets, and setting exclusions!
+          </p>
+          <button
+            onClick={() => setShowExchangeModal(true)}
+            className="inline-flex items-center space-x-2 px-6 py-3 rounded-full bg-[#d4af37] hover:bg-[#f3c053] text-[#0b2b20] font-bold text-sm shadow-lg transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Christmas Exchange</span>
+          </button>
         </div>
       )}
 
