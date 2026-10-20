@@ -52,6 +52,7 @@ interface Exchange {
   currency: string;
   exchangeDate: string;
   status: string;
+  location?: string;
   drawnAt?: string;
   instructions?: string;
   participants: Participant[];
