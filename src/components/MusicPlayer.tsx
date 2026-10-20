@@ -90,50 +90,15 @@ export function MusicPlayer() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const synthTimerRef = useRef<number | null>(null);
   const isPlayingSynthRef = useRef(false);
+  const hasStartedPlayingRef = useRef(false);
 
-  // Fetch custom tracks from backend
-  useEffect(() => {
-    async function loadTracks() {
-      try {
-        const res = await fetch("/api/music");
-        if (res.ok) {
-          const customTracks = await res.json();
-          if (Array.isArray(customTracks) && customTracks.length > 0) {
-            // Sort custom tracks: tracks with sortOrder < 0 (designated default) come first
-            const sortedCustom = [...customTracks].sort(
-              (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
-            );
-            // Place custom tracks first ahead of built-in synth tracks
-            const allTracks = [...sortedCustom, ...BUILTIN_TRACKS];
-            setTracks(allTracks);
-
-            // Restore user's saved track preference if available
-            const savedTrackId = localStorage.getItem("christmas_track_id");
-            if (savedTrackId) {
-              const savedIdx = allTracks.findIndex((t) => t.id === savedTrackId);
-              if (savedIdx !== -1) {
-                setCurrentTrackIndex(savedIdx);
-                return;
-              }
-            }
-            // Otherwise default to the top track (which is the default custom track)
-            setCurrentTrackIndex(0);
-          }
-        }
-      } catch {
-        // Fallback to built-in tracks
-      }
-    }
-    loadTracks();
-
-    // Load saved volume
-    const savedVol = localStorage.getItem("christmas_volume");
-    if (savedVol) {
-      setVolume(parseFloat(savedVol));
-    }
-  }, []);
-
-  const currentTrack = tracks[currentTrackIndex] || tracks[0];
+  // References for autoplay on first interaction
+  const tracksRef = useRef(tracks);
+  tracksRef.current = tracks;
+  const currentTrackIndexRef = useRef(currentTrackIndex);
+  currentTrackIndexRef.current = currentTrackIndex;
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
 
   // Stop synthetic audio playback
   const stopSynth = useCallback(() => {
@@ -209,27 +174,138 @@ export function MusicPlayer() {
     step();
   }, [isMuted, volume, stopSynth, playChimeNote]);
 
+  // Core play function for any track
+  const playTrack = useCallback(
+    (track: Track) => {
+      if (!track) return;
+      hasStartedPlayingRef.current = true;
+      setIsPlaying(true);
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("christmas_user_paused");
+      }
+
+      if (track.source === "UPLOADED" && track.filePath) {
+        stopSynth();
+        if (audioRef.current) {
+          const currentSrc = audioRef.current.src;
+          if (!currentSrc.endsWith(track.filePath)) {
+            audioRef.current.src = track.filePath;
+          }
+          audioRef.current.volume = isMuted ? 0 : volume;
+          audioRef.current.play().catch(() => {
+            setIsPlaying(false);
+          });
+        }
+      } else if (track.melodyNotes) {
+        if (audioRef.current) audioRef.current.pause();
+        startSynth(track.melodyNotes);
+      }
+    },
+    [isMuted, volume, stopSynth, startSynth]
+  );
+
+  // Fetch custom tracks from backend
+  useEffect(() => {
+    async function loadTracks() {
+      try {
+        const res = await fetch("/api/music");
+        if (res.ok) {
+          const customTracks = await res.json();
+          if (Array.isArray(customTracks) && customTracks.length > 0) {
+            // Sort custom tracks: tracks with sortOrder < 0 (designated default) come first
+            const sortedCustom = [...customTracks].sort(
+              (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+            );
+            // Place custom tracks first ahead of built-in synth tracks
+            const allTracks = [...sortedCustom, ...BUILTIN_TRACKS];
+            setTracks(allTracks);
+
+            // Restore user's saved track preference if available
+            const savedTrackId = localStorage.getItem("christmas_track_id");
+            let targetIdx = 0;
+            if (savedTrackId) {
+              const savedIdx = allTracks.findIndex((t) => t.id === savedTrackId);
+              if (savedIdx !== -1) {
+                targetIdx = savedIdx;
+              }
+            }
+            setCurrentTrackIndex(targetIdx);
+
+            // If user already interacted and music was started with synth placeholder,
+            // seamlessly switch to default custom track
+            if (hasStartedPlayingRef.current && isPlayingRef.current) {
+              const targetTrack = allTracks[targetIdx];
+              if (targetTrack) {
+                playTrack(targetTrack);
+              }
+            }
+          }
+        }
+      } catch {
+        // Fallback to built-in tracks
+      }
+    }
+    loadTracks();
+
+    // Load saved volume
+    const savedVol = localStorage.getItem("christmas_volume");
+    if (savedVol) {
+      setVolume(parseFloat(savedVol));
+    }
+  }, [playTrack]);
+
+  // Autoplay on first user interaction anywhere on the page
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Check if user previously paused music in this session
+    if (sessionStorage.getItem("christmas_user_paused") === "true") return;
+
+    const handleFirstInteraction = () => {
+      // Remove listeners right away so it only triggers once
+      ["pointerdown", "click", "touchstart", "keydown"].forEach((evt) => {
+        window.removeEventListener(evt, handleFirstInteraction);
+      });
+
+      if (sessionStorage.getItem("christmas_user_paused") === "true") return;
+      if (isPlayingRef.current) return;
+
+      const track = tracksRef.current[currentTrackIndexRef.current] || tracksRef.current[0];
+      if (track) {
+        playTrack(track);
+      }
+    };
+
+    ["pointerdown", "click", "touchstart", "keydown"].forEach((evt) => {
+      window.addEventListener(evt, handleFirstInteraction, { passive: true });
+    });
+
+    return () => {
+      ["pointerdown", "click", "touchstart", "keydown"].forEach((evt) => {
+        window.removeEventListener(evt, handleFirstInteraction);
+      });
+    };
+  }, [playTrack]);
+
+  const currentTrack = tracks[currentTrackIndex] || tracks[0];
+
   // Handle Play/Pause
   const togglePlay = () => {
     if (isPlaying) {
       setIsPlaying(false);
+      hasStartedPlayingRef.current = false;
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("christmas_user_paused", "true");
+      }
       if (audioRef.current) {
         audioRef.current.pause();
       }
       stopSynth();
     } else {
-      setIsPlaying(true);
-      if (currentTrack.source === "UPLOADED" && currentTrack.filePath) {
-        stopSynth();
-        if (audioRef.current) {
-          audioRef.current.src = currentTrack.filePath;
-          audioRef.current.volume = isMuted ? 0 : volume;
-          audioRef.current.play().catch(() => setIsPlaying(false));
-        }
-      } else if (currentTrack.melodyNotes) {
-        if (audioRef.current) audioRef.current.pause();
-        startSynth(currentTrack.melodyNotes);
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("christmas_user_paused");
       }
+      playTrack(currentTrack);
     }
   };
 
@@ -240,23 +316,32 @@ export function MusicPlayer() {
       localStorage.setItem("christmas_track_id", selected.id);
     }
     if (isPlaying) {
-      stopSynth();
-      if (selected.source === "UPLOADED" && selected.filePath && audioRef.current) {
-        audioRef.current.src = selected.filePath;
-        audioRef.current.play().catch(() => {});
-      } else if (selected.melodyNotes) {
-        if (audioRef.current) audioRef.current.pause();
-        startSynth(selected.melodyNotes);
-      }
+      playTrack(selected);
     }
   };
 
   const handleNext = () => {
-    selectTrack((currentTrackIndex + 1) % tracks.length);
+    const nextIdx = (currentTrackIndex + 1) % tracks.length;
+    setCurrentTrackIndex(nextIdx);
+    const nextTrack = tracks[nextIdx];
+    if (nextTrack) {
+      localStorage.setItem("christmas_track_id", nextTrack.id);
+      if (isPlaying) {
+        playTrack(nextTrack);
+      }
+    }
   };
 
   const handlePrev = () => {
-    selectTrack((currentTrackIndex - 1 + tracks.length) % tracks.length);
+    const prevIdx = (currentTrackIndex - 1 + tracks.length) % tracks.length;
+    setCurrentTrackIndex(prevIdx);
+    const prevTrack = tracks[prevIdx];
+    if (prevTrack) {
+      localStorage.setItem("christmas_track_id", prevTrack.id);
+      if (isPlaying) {
+        playTrack(prevTrack);
+      }
+    }
   };
 
   // Adjust volume
