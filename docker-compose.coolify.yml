@@ -25,6 +25,7 @@ services:
       db:
         condition: service_healthy
     networks:
+      - default
       - coolify
 
   db:
@@ -43,12 +44,13 @@ services:
       retries: 15
       start_period: 15s
     networks:
-      - coolify
+      - default
 
 volumes:
   postgres_data:
   music_uploads:
 
 networks:
+  default:
   coolify:
     external: true
