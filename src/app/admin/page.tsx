@@ -20,6 +20,7 @@ import {
   Loader2,
   AlertCircle,
   ArrowLeft,
+  Edit3,
 } from "lucide-react";
 
 interface Member {
@@ -87,6 +88,15 @@ export default function AdminPage() {
   const [newExDate, setNewExDate] = useState(`${new Date().getFullYear()}-12-25`);
   const [newExInstructions, setNewExInstructions] = useState("Please wrap your gift and label it for your recipient!");
   const [creatingExchange, setCreatingExchange] = useState(false);
+
+  // Edit exchange modal state
+  const [showEditExchangeModal, setShowEditExchangeModal] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editBudget, setEditBudget] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editInstructions, setEditInstructions] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Exclusion modal state
   const [showExclusionModal, setShowExclusionModal] = useState(false);
@@ -218,6 +228,52 @@ export default function AdminPage() {
       setError(err instanceof Error ? err.message : "Failed to create exchange");
     } finally {
       setCreatingExchange(false);
+    }
+  };
+
+  // Open Edit Modal pre-populated
+  const openEditModal = () => {
+    if (!exchange) return;
+    setEditName(exchange.name);
+    setEditBudget(exchange.budget.toString());
+    setEditDate(new Date(exchange.exchangeDate).toISOString().split("T")[0]);
+    setEditLocation(exchange.location || "");
+    setEditInstructions(exchange.instructions || "");
+    setShowEditExchangeModal(true);
+  };
+
+  // Save Edit Exchange
+  const handleSaveExchangeEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!exchange) return;
+    setSavingEdit(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/exchange", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exchangeId: exchange.id,
+          name: editName,
+          budget: editBudget,
+          currency: exchange.currency,
+          exchangeDate: editDate,
+          location: editLocation,
+          instructions: editInstructions,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update exchange");
+
+      setSuccess("Exchange settings updated successfully!");
+      setShowEditExchangeModal(false);
+      loadData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to update exchange");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -471,9 +527,19 @@ export default function AdminPage() {
         <div className="festive-card p-6 sm:p-8 rounded-2xl border-2 border-[#d4af37]/40 space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#1d5943] pb-4">
             <div>
-              <span className="text-xs font-bold text-[#f3c053] uppercase tracking-wider">
-                Active Exchange &bull; Christmas {exchange.year}
-              </span>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold text-[#f3c053] uppercase tracking-wider">
+                  Active Exchange &bull; Christmas {exchange.year}
+                </span>
+                <button
+                  onClick={openEditModal}
+                  className="px-2 py-0.5 rounded bg-[#144534] hover:bg-[#1d5943] border border-[#d4af37]/40 text-[11px] text-[#f3c053] flex items-center space-x-1 transition shadow-sm"
+                  title="Edit Exchange Settings"
+                >
+                  <Edit3 className="w-3 h-3 text-[#d4af37]" />
+                  <span>Edit Settings</span>
+                </button>
+              </div>
               <h2 className="text-2xl font-bold text-[#fef9ee] font-festive">{exchange.name}</h2>
               <div className="text-xs text-slate-300 mt-1">
                 Budget: ${Number(exchange.budget).toFixed(2)} {exchange.currency} &bull; Date: {new Date(exchange.exchangeDate).toLocaleDateString()}
@@ -1079,6 +1145,120 @@ export default function AdminPage() {
                   className="px-6 py-2 rounded-lg bg-[#d4af37] hover:bg-[#f3c053] text-[#0b2b20] font-bold text-xs"
                 >
                   {uploadingMusic ? "Uploading..." : "Upload & Save Track"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Edit Exchange Settings */}
+      {showEditExchangeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="festive-card max-w-lg w-full p-6 rounded-2xl border-2 border-[#d4af37]/50 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#1d5943] pb-3">
+              <h3 className="text-lg font-bold text-[#fef9ee] font-festive flex items-center space-x-2">
+                <Edit3 className="w-5 h-5 text-[#d4af37]" />
+                <span>Edit Exchange Settings</span>
+              </h3>
+              <button
+                onClick={() => setShowEditExchangeModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveExchangeEdit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="editNameInput">
+                  Exchange Name *
+                </label>
+                <input
+                  id="editNameInput"
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100 focus:border-[#d4af37] focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="editBudgetInput">
+                    Gift Budget ($) *
+                  </label>
+                  <input
+                    id="editBudgetInput"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={editBudget}
+                    onChange={(e) => setEditBudget(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100 focus:border-[#d4af37] focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="editDateInput">
+                    Exchange Date *
+                  </label>
+                  <input
+                    id="editDateInput"
+                    type="date"
+                    required
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100 focus:border-[#d4af37] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="editLocationInput">
+                  Location (Optional)
+                </label>
+                <input
+                  id="editLocationInput"
+                  type="text"
+                  value={editLocation}
+                  onChange={(e) => setEditLocation(e.target.value)}
+                  placeholder="Grandma's House / Living Room"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100 focus:border-[#d4af37] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1" htmlFor="editInstructionsInput">
+                  Special Instructions
+                </label>
+                <textarea
+                  id="editInstructionsInput"
+                  rows={3}
+                  value={editInstructions}
+                  onChange={(e) => setEditInstructions(e.target.value)}
+                  placeholder="Wrap gifts nicely, label them with recipient's name..."
+                  className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100 focus:border-[#d4af37] focus:outline-none resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-[#1d5943]">
+                <button
+                  type="button"
+                  onClick={() => setShowEditExchangeModal(false)}
+                  className="px-4 py-2 rounded-lg border border-[#1d5943] text-xs text-slate-300 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="px-6 py-2 rounded-lg bg-[#d4af37] hover:bg-[#f3c053] text-[#0b2b20] font-bold text-xs shadow flex items-center space-x-1.5"
+                >
+                  {savingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{savingEdit ? "Saving..." : "Save Changes"}</span>
                 </button>
               </div>
             </form>

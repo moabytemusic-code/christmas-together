@@ -184,3 +184,69 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Failed to update participation." }, { status: 500 });
   }
 }
+
+// PUT /api/exchange - Edit exchange details (Admin only)
+export async function PUT(req: Request) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const {
+      exchangeId,
+      name,
+      budget,
+      currency = "USD",
+      exchangeDate,
+      location,
+      instructions,
+    } = await req.json();
+
+    if (!exchangeId || !name || !budget || !exchangeDate) {
+      return NextResponse.json({ error: "Exchange ID, name, budget, and date are required." }, { status: 400 });
+    }
+
+    const exchange = await prisma.giftExchange.findUnique({
+      where: { id: exchangeId },
+      include: {
+        familyGroup: {
+          include: {
+            memberships: {
+              where: { userId: session.id },
+            },
+          },
+        },
+      },
+    });
+
+    if (!exchange) {
+      return NextResponse.json({ error: "Exchange not found." }, { status: 404 });
+    }
+
+    const membership = exchange.familyGroup.memberships[0];
+    const isCreator = exchange.createdById === session.id;
+    const isAdmin = (membership && membership.role === "ADMIN") || session.role === "ADMIN";
+
+    if (!isAdmin && !isCreator) {
+      return NextResponse.json({ error: "Unauthorized. Admin access required." }, { status: 403 });
+    }
+
+    const updated = await prisma.giftExchange.update({
+      where: { id: exchangeId },
+      data: {
+        name: name.trim(),
+        budget: parseFloat(budget),
+        currency: currency.toUpperCase(),
+        exchangeDate: new Date(exchangeDate),
+        location: location?.trim() || null,
+        instructions: instructions?.trim() || null,
+      },
+    });
+
+    return NextResponse.json({ success: true, exchange: updated });
+  } catch (err: unknown) {
+    console.error("[Edit Exchange Error]:", err);
+    return NextResponse.json({ error: "Failed to update exchange." }, { status: 500 });
+  }
+}
