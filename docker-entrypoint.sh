@@ -3,13 +3,15 @@ set -e
 
 echo "🎄 Christmas Together - Starting container..."
 
-# Check if DATABASE_URL is provided
 if [ -n "$DATABASE_URL" ]; then
+  # Strip query parameters (?schema=public) for pg_isready and psql libpq compatibility
+  DB_URL_NO_QUERY=$(echo "$DATABASE_URL" | sed 's/\?.*//')
+
   echo "⏳ Checking PostgreSQL connection..."
   MAX_RETRIES=30
   RETRY_COUNT=0
 
-  until pg_isready -d "$DATABASE_URL" > /dev/null 2>&1 || [ $RETRY_COUNT -ge $MAX_RETRIES ]; do
+  until pg_isready -d "$DB_URL_NO_QUERY" > /dev/null 2>&1 || [ $RETRY_COUNT -ge $MAX_RETRIES ]; do
     RETRY_COUNT=$((RETRY_COUNT + 1))
     echo "Database not ready yet (attempt $RETRY_COUNT/$MAX_RETRIES). Waiting 2s..."
     sleep 2
@@ -24,7 +26,7 @@ if [ -n "$DATABASE_URL" ]; then
   # Run idempotent schema initialization
   if [ -f "/app/prisma/init.sql" ]; then
     echo "📦 Ensuring database schema is up-to-date (prisma/init.sql)..."
-    psql "$DATABASE_URL" -f /app/prisma/init.sql || echo "⚠️ Notice: SQL init finished."
+    psql "$DB_URL_NO_QUERY" -f /app/prisma/init.sql || echo "⚠️ Notice: SQL init finished."
   fi
 
   # Run seed script (idempotent: seeds admin user & initial exchange if empty)
