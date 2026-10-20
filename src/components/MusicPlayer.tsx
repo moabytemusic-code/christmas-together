@@ -11,6 +11,7 @@ export interface Track {
   source: "BUILTIN" | "UPLOADED";
   filePath?: string;
   melodyNotes?: { note: number; duration: number }[]; // For Web Audio synth
+  sortOrder?: number;
 }
 
 // Built-in synthesized festive melodies (frequencies in Hz and durations in beats)
@@ -98,7 +99,25 @@ export function MusicPlayer() {
         if (res.ok) {
           const customTracks = await res.json();
           if (Array.isArray(customTracks) && customTracks.length > 0) {
-            setTracks([...BUILTIN_TRACKS, ...customTracks]);
+            // Sort custom tracks: tracks with sortOrder < 0 (designated default) come first
+            const sortedCustom = [...customTracks].sort(
+              (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+            );
+            // Place custom tracks first ahead of built-in synth tracks
+            const allTracks = [...sortedCustom, ...BUILTIN_TRACKS];
+            setTracks(allTracks);
+
+            // Restore user's saved track preference if available
+            const savedTrackId = localStorage.getItem("christmas_track_id");
+            if (savedTrackId) {
+              const savedIdx = allTracks.findIndex((t) => t.id === savedTrackId);
+              if (savedIdx !== -1) {
+                setCurrentTrackIndex(savedIdx);
+                return;
+              }
+            }
+            // Otherwise default to the top track (which is the default custom track)
+            setCurrentTrackIndex(0);
           }
         }
       } catch {
@@ -214,36 +233,30 @@ export function MusicPlayer() {
     }
   };
 
-  const handleNext = () => {
-    const nextIdx = (currentTrackIndex + 1) % tracks.length;
-    setCurrentTrackIndex(nextIdx);
+  const selectTrack = (idx: number) => {
+    setCurrentTrackIndex(idx);
+    const selected = tracks[idx];
+    if (selected) {
+      localStorage.setItem("christmas_track_id", selected.id);
+    }
     if (isPlaying) {
       stopSynth();
-      const nextT = tracks[nextIdx];
-      if (nextT.source === "UPLOADED" && nextT.filePath && audioRef.current) {
-        audioRef.current.src = nextT.filePath;
+      if (selected.source === "UPLOADED" && selected.filePath && audioRef.current) {
+        audioRef.current.src = selected.filePath;
         audioRef.current.play().catch(() => {});
-      } else if (nextT.melodyNotes) {
+      } else if (selected.melodyNotes) {
         if (audioRef.current) audioRef.current.pause();
-        startSynth(nextT.melodyNotes);
+        startSynth(selected.melodyNotes);
       }
     }
   };
 
+  const handleNext = () => {
+    selectTrack((currentTrackIndex + 1) % tracks.length);
+  };
+
   const handlePrev = () => {
-    const prevIdx = (currentTrackIndex - 1 + tracks.length) % tracks.length;
-    setCurrentTrackIndex(prevIdx);
-    if (isPlaying) {
-      stopSynth();
-      const prevT = tracks[prevIdx];
-      if (prevT.source === "UPLOADED" && prevT.filePath && audioRef.current) {
-        audioRef.current.src = prevT.filePath;
-        audioRef.current.play().catch(() => {});
-      } else if (prevT.melodyNotes) {
-        if (audioRef.current) audioRef.current.pause();
-        startSynth(prevT.melodyNotes);
-      }
-    }
+    selectTrack((currentTrackIndex - 1 + tracks.length) % tracks.length);
   };
 
   // Adjust volume
@@ -355,6 +368,25 @@ export function MusicPlayer() {
                 aria-label="Volume slider"
               />
             </div>
+
+            {/* Track Selector Dropdown */}
+            {tracks.length > 1 && (
+              <div className="pt-1">
+                <label htmlFor="trackSelect" className="sr-only">Choose Track</label>
+                <select
+                  id="trackSelect"
+                  value={currentTrackIndex}
+                  onChange={(e) => selectTrack(parseInt(e.target.value, 10))}
+                  className="w-full bg-[#0b2b20] border border-[#1d5943] text-[#f3c053] text-[11px] rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#d4af37] truncate"
+                >
+                  {tracks.map((t, idx) => (
+                    <option key={t.id} value={idx}>
+                      {t.sortOrder !== undefined && t.sortOrder < 0 ? "⭐ " : ""}{t.title} {t.artist ? `— ${t.artist}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -21,6 +21,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Edit3,
+  Star,
 } from "lucide-react";
 
 interface Member {
@@ -66,6 +67,7 @@ interface MusicTrack {
   category: string;
   source: string;
   filePath: string;
+  sortOrder?: number;
 }
 
 export default function AdminPage() {
@@ -121,6 +123,7 @@ export default function AdminPage() {
   const [musicArtist, setMusicArtist] = useState("");
   const [musicCategory, setMusicCategory] = useState("FESTIVE");
   const [musicFile, setMusicFile] = useState<File | null>(null);
+  const [musicIsDefault, setMusicIsDefault] = useState(false);
   const [uploadingMusic, setUploadingMusic] = useState(false);
 
   // Audio preview element
@@ -389,6 +392,7 @@ export default function AdminPage() {
       formData.append("title", musicTitle);
       formData.append("artist", musicArtist);
       formData.append("category", musicCategory);
+      formData.append("isDefault", musicIsDefault.toString());
 
       const res = await fetch("/api/music", {
         method: "POST",
@@ -403,11 +407,35 @@ export default function AdminPage() {
       setMusicTitle("");
       setMusicArtist("");
       setMusicFile(null);
+      setMusicIsDefault(false);
       loadData();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploadingMusic(false);
+    }
+  };
+
+  // Set as Default Music Track
+  const handleSetDefaultMusic = async (trackId: string, currentIsDefault: boolean) => {
+    try {
+      setError(null);
+      const res = await fetch("/api/music", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: trackId,
+          isDefault: !currentIsDefault,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update default track");
+
+      setSuccess(!currentIsDefault ? "Track set as default starting music!" : "Default track cleared.");
+      loadData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to update default track");
     }
   };
 
@@ -762,12 +790,31 @@ export default function AdminPage() {
                     <Play className="w-3 h-3" />
                   </button>
                   <div className="truncate">
-                    <div className="text-xs font-semibold text-slate-200 truncate">{t.title}</div>
-                    <div className="text-[10px] text-[#f3c053]">{t.category} &bull; {t.source}</div>
+                    <div className="text-xs font-semibold text-slate-200 truncate flex items-center space-x-1.5">
+                      <span className="truncate">{t.title}</span>
+                      {t.sortOrder !== undefined && t.sortOrder < 0 && (
+                        <span className="shrink-0 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold">
+                          ⭐ Default
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-[#f3c053]">{t.artist ? `${t.artist} • ` : ""}{t.category} &bull; {t.source}</div>
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 shrink-0">
+                  <button
+                    onClick={() => handleSetDefaultMusic(t.id, t.sortOrder !== undefined && t.sortOrder < 0)}
+                    className={`px-2 py-1 rounded text-[10px] font-bold transition flex items-center space-x-1 ${
+                      t.sortOrder !== undefined && t.sortOrder < 0
+                        ? "bg-amber-400 text-[#0b2b20] shadow-sm"
+                        : "bg-[#144534] text-slate-300 hover:text-amber-300 hover:bg-[#1d5943] border border-[#1d5943]"
+                    }`}
+                    title={t.sortOrder !== undefined && t.sortOrder < 0 ? "Default starting track (click to unset)" : "Set as default starting track"}
+                  >
+                    <Star className="w-3 h-3" />
+                    <span>{t.sortOrder !== undefined && t.sortOrder < 0 ? "Default" : "Make Default"}</span>
+                  </button>
                   <button
                     onClick={() => handleDeleteMusic(t.id)}
                     className="p-1 text-slate-400 hover:text-red-400"
@@ -1145,6 +1192,21 @@ export default function AdminPage() {
                   onChange={(e) => setMusicFile(e.target.files?.[0] || null)}
                   className="w-full px-2 py-1 text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#144534] file:text-[#d4af37] hover:file:bg-[#1d5943]"
                 />
+              </div>
+
+              <div className="pt-1">
+                <label className="flex items-center space-x-2 text-xs text-slate-200 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={musicIsDefault}
+                    onChange={(e) => setMusicIsDefault(e.target.checked)}
+                    className="w-4 h-4 rounded bg-[#0b2b20] border-[#1d5943] text-[#d4af37] focus:ring-[#d4af37]"
+                  />
+                  <span className="flex items-center space-x-1 font-medium">
+                    <Star className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Set as default track (plays first for all family members)</span>
+                  </span>
+                </label>
               </div>
 
               <div className="flex justify-end space-x-3 pt-3 border-t border-[#1d5943]">

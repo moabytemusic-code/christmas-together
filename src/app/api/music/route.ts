@@ -18,6 +18,7 @@ export async function GET() {
         source: true,
         filePath: true,
         duration: true,
+        sortOrder: true,
       },
     });
 
@@ -41,6 +42,7 @@ export async function POST(req: Request) {
     const title = formData.get("title") as string | null;
     const artist = formData.get("artist") as string | null;
     const category = (formData.get("category") as string | null) || "FESTIVE";
+    const isDefault = formData.get("isDefault") === "true";
 
     if (!file || !title) {
       return NextResponse.json({ error: "Audio file and title are required." }, { status: 400 });
@@ -52,6 +54,13 @@ export async function POST(req: Request) {
     // Validate and save to persistent storage
     const { filePath, relativePath, mimeType } = await saveAudioTrack(buffer, file.name);
 
+    if (isDefault) {
+      // Reset any previous default track
+      await prisma.musicTrack.updateMany({
+        data: { sortOrder: 0 },
+      });
+    }
+
     const track = await prisma.musicTrack.create({
       data: {
         title: title.trim(),
@@ -61,6 +70,7 @@ export async function POST(req: Request) {
         filePath: relativePath, // API route for playback
         mimeType,
         uploadedById: session.id,
+        sortOrder: isDefault ? -1 : 0,
       },
     });
 
@@ -68,6 +78,46 @@ export async function POST(req: Request) {
   } catch (err: unknown) {
     console.error("[Upload Music Error]:", err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "Upload failed." }, { status: 500 });
+  }
+}
+
+// PATCH toggle or set default track (Admin only)
+export async function PATCH(req: Request) {
+  try {
+    const session = await getSession();
+    if (!session || session.role !== "ADMIN") {
+      return NextResponse.json({ error: "Only administrators can configure music settings." }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const { id, isDefault } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "Track ID is required." }, { status: 400 });
+    }
+
+    if (isDefault) {
+      // Set this track as default (sortOrder: -1) and reset others to 0
+      await prisma.$transaction([
+        prisma.musicTrack.updateMany({
+          data: { sortOrder: 0 },
+        }),
+        prisma.musicTrack.update({
+          where: { id },
+          data: { sortOrder: -1 },
+        }),
+      ]);
+    } else {
+      await prisma.musicTrack.update({
+        where: { id },
+        data: { sortOrder: 0 },
+      });
+    }
+
+    return NextResponse.json({ success: true, message: "Default track updated successfully." });
+  } catch (err: unknown) {
+    console.error("[Update Music Error]:", err);
+    return NextResponse.json({ error: "Failed to update default track." }, { status: 500 });
   }
 }
 
