@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Gift, Sparkles, User, Shield, LogOut, Menu, X, Heart } from "lucide-react";
@@ -47,9 +48,18 @@ export function Navbar({ user }: NavbarProps) {
           {/* Brand Logo */}
           <Link
             href="/"
-            className="flex items-center space-x-3 text-lg font-bold text-[#fef9ee] hover:text-[#d4af37] transition"
+            className="flex items-center space-x-3 text-lg font-bold text-[#fef9ee] hover:text-[#d4af37] transition group"
           >
-            <span className="text-2xl animate-float">🎄</span>
+            <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-[#d4af37] shadow-md shadow-[#d4af37]/20 flex-shrink-0 group-hover:scale-105 transition-transform bg-[#071d15]">
+              <Image
+                src="/images/santa-logo.png"
+                alt="Christmas Together Logo"
+                fill
+                sizes="40px"
+                className="object-cover"
+                priority
+              />
+            </div>
             <div className="flex flex-col">
               <span className="leading-tight font-festive tracking-wide text-[#fef9ee]">Christmas Together</span>
               <span className="text-[10px] text-[#f3c053] tracking-widest uppercase font-sans">Family Secret Santa</span>

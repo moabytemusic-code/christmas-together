@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { getSession } from "@/lib/auth/session";
 import { Gift, ShieldCheck, HeartHandshake, Sparkles, Music2, ArrowRight } from "lucide-react";
 
@@ -19,6 +20,18 @@ export default async function HomePage() {
     <div className="space-y-16 py-6 sm:py-12">
       {/* Hero Section */}
       <section className="text-center space-y-6 max-w-3xl mx-auto px-4">
+        {/* Santa Emblem Logo */}
+        <div className="relative w-28 h-28 sm:w-36 sm:h-36 mx-auto rounded-full overflow-hidden border-4 border-[#d4af37] shadow-2xl shadow-[#d4af37]/30 bg-[#071d15] animate-float">
+          <Image
+            src="/images/santa-logo.png"
+            alt="Christmas Together Santa"
+            fill
+            sizes="(max-width: 640px) 112px, 144px"
+            className="object-cover"
+            priority
+          />
+        </div>
+
         <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-[#144534] border border-[#d4af37]/40 text-[#f3c053] text-sm shadow-sm">
           <Sparkles className="w-4 h-4 text-[#d4af37]" />
           <span>{diffDays} days until Christmas!</span>

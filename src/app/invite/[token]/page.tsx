@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Gift, Sparkles, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 
@@ -106,7 +107,16 @@ export default function InviteAcceptPage({
   return (
     <div className="max-w-md mx-auto my-12 px-4">
       <div className="festive-card p-6 sm:p-8 rounded-2xl space-y-6 text-center">
-        <div className="text-4xl animate-float">🎄 🎁</div>
+        <div className="relative w-24 h-24 mx-auto rounded-full overflow-hidden border-2 border-[#d4af37] shadow-xl shadow-[#d4af37]/25 bg-[#071d15] animate-float">
+          <Image
+            src="/images/santa-logo.png"
+            alt="Christmas Together Santa"
+            fill
+            sizes="96px"
+            className="object-cover"
+            priority
+          />
+        </div>
         <div className="space-y-1">
           <h1 className="text-2xl sm:text-3xl font-bold text-[#fef9ee] font-festive">
             You&apos;re Invited!
