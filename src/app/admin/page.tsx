@@ -22,6 +22,8 @@ import {
   ArrowLeft,
   Edit3,
   Star,
+  Bell,
+  Mail,
 } from "lucide-react";
 
 interface Member {
@@ -70,11 +72,24 @@ interface MusicTrack {
   sortOrder?: number;
 }
 
+interface PendingInvitation {
+  id: string;
+  email: string;
+  token?: string;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
 export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [exchange, setExchange] = useState<Exchange | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
+  const [remindingAll, setRemindingAll] = useState(false);
+  const [remindingId, setRemindingId] = useState<string | null>(null);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -142,6 +157,10 @@ export default function AdminPage() {
         const mems = primaryGroup.memberships.map((m: { user: Member }) => m.user);
         setMembers(mems);
 
+        if (Array.isArray(primaryGroup.invitations)) {
+          setPendingInvitations(primaryGroup.invitations);
+        }
+
         if (primaryGroup.exchanges && primaryGroup.exchanges.length > 0) {
           const currentEx = primaryGroup.exchanges[0];
           // Directly fetch exclusions to guarantee latest list
@@ -208,6 +227,43 @@ export default function AdminPage() {
       setError(err instanceof Error ? err.message : "Failed to invite");
     } finally {
       setInviting(false);
+    }
+  };
+
+  // Send Follow-Up Reminders
+  const handleSendReminder = async (invitationId?: string) => {
+    try {
+      if (invitationId) {
+        setRemindingId(invitationId);
+      } else {
+        setRemindingAll(true);
+      }
+      setError(null);
+      setSuccess(null);
+
+      const famRes = await fetch("/api/family");
+      const famData = await famRes.json();
+      const groupId = famData.memberships?.[0]?.familyGroupId;
+
+      const res = await fetch("/api/family/invite/remind", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          familyGroupId: groupId,
+          invitationId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send reminders");
+
+      setSuccess(data.message || "Follow-up invitations dispatched!");
+      await loadData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to send reminders");
+    } finally {
+      setRemindingAll(false);
+      setRemindingId(null);
     }
   };
 
@@ -763,6 +819,100 @@ export default function AdminPage() {
                 >
                   <Copy className="w-3.5 h-3.5" />
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Pending Invitations & Follow-Up Reminders */}
+          {pendingInvitations.length > 0 && (
+            <div className="pt-4 border-t border-[#1d5943] space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-[#fef9ee] flex items-center space-x-1.5">
+                    <Bell className="w-3.5 h-3.5 text-[#d4af37]" />
+                    <span>Awaiting Response ({pendingInvitations.length})</span>
+                  </div>
+                  <div className="text-[11px] text-slate-300">
+                    Members invited who have not yet responded
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleSendReminder()}
+                  disabled={remindingAll}
+                  className="px-3 py-1.5 rounded-lg bg-[#144534] hover:bg-[#1d5943] border border-[#d4af37]/40 text-xs text-[#f3c053] font-semibold flex items-center space-x-1 disabled:opacity-50 transition"
+                  title="Send follow-up reminder emails to all pending invites"
+                >
+                  {remindingAll ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Bell className="w-3 h-3 text-[#d4af37]" />
+                  )}
+                  <span>{remindingAll ? "Sending..." : "Remind All"}</span>
+                </button>
+              </div>
+
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {pendingInvitations.map((inv) => {
+                  const inviteUrl = inv.token
+                    ? `${typeof window !== "undefined" ? window.location.origin : ""}/invite/${inv.token}`
+                    : "";
+                  const isCopied = copiedToken === inv.id;
+                  const isRemindingThis = remindingId === inv.id;
+
+                  return (
+                    <div
+                      key={inv.id}
+                      className="p-2.5 rounded-xl bg-[#0b2b20]/80 border border-[#1d5943] flex items-center justify-between text-xs"
+                    >
+                      <div className="truncate mr-2">
+                        <div className="font-semibold text-slate-200 truncate flex items-center space-x-1.5">
+                          <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="truncate">{inv.email}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          Expires {new Date(inv.expiresAt).toLocaleDateString()}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        {inv.token && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (inviteUrl) {
+                                navigator.clipboard.writeText(inviteUrl);
+                                setCopiedToken(inv.id);
+                                setTimeout(() => setCopiedToken(null), 2500);
+                              }
+                            }}
+                            className="px-2 py-1 rounded bg-[#144534] hover:bg-[#1d5943] text-slate-300 text-[11px] font-medium border border-[#1d5943] flex items-center space-x-1 transition"
+                            title="Copy personal invite link"
+                          >
+                            <Copy className="w-3 h-3 text-[#d4af37]" />
+                            <span>{isCopied ? "Copied!" : "Copy"}</span>
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleSendReminder(inv.id)}
+                          disabled={isRemindingThis}
+                          className="px-2.5 py-1 rounded bg-[#d4af37] hover:bg-[#f3c053] text-[#0b2b20] text-[11px] font-bold flex items-center space-x-1 disabled:opacity-50 transition"
+                          title="Send follow-up reminder email"
+                        >
+                          {isRemindingThis ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Bell className="w-3 h-3" />
+                          )}
+                          <span>{isRemindingThis ? "..." : "Remind"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

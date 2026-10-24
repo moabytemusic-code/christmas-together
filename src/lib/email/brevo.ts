@@ -197,6 +197,46 @@ export async function sendInvitationEmail({
 }
 
 /**
+ * Send follow-up reminder email for pending invitations
+ */
+export async function sendFollowUpInvitationEmail({
+  toEmail,
+  inviterName,
+  familyGroupName,
+  inviteToken,
+  appUrl,
+}: {
+  toEmail: string;
+  inviterName: string;
+  familyGroupName: string;
+  inviteToken: string;
+  appUrl: string;
+}): Promise<EmailResult> {
+  const inviteUrl = `${appUrl}/invite/${inviteToken}`;
+  const subject = `🔔 Reminder: You're invited to join ${familyGroupName} Secret Santa!`;
+
+  const content = `
+    <h2 style="color: #f3c053; margin-top: 0;">Holiday Reminder! 🎄</h2>
+    <p>Ho Ho Ho! Just a friendly festive reminder that <strong>${inviterName}</strong> invited you to participate in the family Secret Santa for <strong>${familyGroupName}</strong>.</p>
+    <p>We are preparing to draw names soon! Please accept your invitation so you can share your holiday wish list, see gift budgets, and join in the family celebration.</p>
+    <div class="btn-container">
+      <a href="${inviteUrl}" class="btn">✨ Accept Your Invitation ✨</a>
+    </div>
+    <p style="font-size: 13px; color: #cbd5e1;">
+      Or paste this link into your browser:<br>
+      <a href="${inviteUrl}" style="color: #f3c053;">${inviteUrl}</a>
+    </p>
+  `;
+
+  return sendEmail({
+    toEmail,
+    subject,
+    htmlContent: wrapFestiveTemplate(subject, content),
+    textContent: `Friendly reminder: ${inviterName} invited you to join ${familyGroupName} Secret Santa!\n\nPlease accept your invitation before names are drawn:\n${inviteUrl}`,
+  });
+}
+
+/**
  * Send password reset email
  */
 export async function sendPasswordResetEmail({

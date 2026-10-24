@@ -40,7 +40,7 @@ export async function GET() {
             },
             invitations: {
               where: { status: "PENDING" },
-              select: { id: true, email: true, status: true, expiresAt: true, createdAt: true },
+              select: { id: true, email: true, status: true, token: true, expiresAt: true, createdAt: true },
             },
           },
         },
