@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { Priority } from "@prisma/client";
-import { tagAmazonUrl } from "@/lib/affiliate";
+import { tagAmazonUrl, tagTextAmazonUrls } from "@/lib/affiliate";
 
 // POST add a new wish list item
 export async function POST(req: Request) {
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       data: {
         wishListId: wishList.id,
         title: title.trim(),
-        description: description?.trim(),
+        description: description?.trim() ? tagTextAmazonUrls(description.trim()) : null,
         url: processedUrl,
         price: price ? parseFloat(price) : null,
         priority: priority as Priority,
