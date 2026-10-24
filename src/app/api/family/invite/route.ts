@@ -141,3 +141,51 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Failed to verify invitation." }, { status: 500 });
   }
 }
+
+// DELETE /api/family/invite?id=... - Cancel / delete pending invitation
+export async function DELETE(req: Request) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json({ error: "Invitation ID is required." }, { status: 400 });
+    }
+
+    const invite = await prisma.invitation.findUnique({
+      where: { id },
+    });
+
+    if (!invite) {
+      return NextResponse.json({ error: "Invitation not found." }, { status: 404 });
+    }
+
+    // Verify user is admin
+    const membership = await prisma.familyMembership.findUnique({
+      where: {
+        familyGroupId_userId: {
+          familyGroupId: invite.familyGroupId,
+          userId: session.id,
+        },
+      },
+    });
+
+    if (!membership || (membership.role !== "ADMIN" && session.role !== "ADMIN")) {
+      return NextResponse.json({ error: "Only administrators can cancel invitations." }, { status: 403 });
+    }
+
+    await prisma.invitation.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true, message: "Invitation cancelled successfully." });
+  } catch (err: unknown) {
+    console.error("[Delete Invite Error]:", err);
+    return NextResponse.json({ error: "Failed to delete invitation." }, { status: 500 });
+  }
+}

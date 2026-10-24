@@ -158,7 +158,12 @@ export default function AdminPage() {
         setMembers(mems);
 
         if (Array.isArray(primaryGroup.invitations)) {
-          setPendingInvitations(primaryGroup.invitations);
+          // Exclude any invitation whose email already belongs to a registered member
+          const activeEmails = new Set(mems.map((m: Member) => m.email.toLowerCase()));
+          const truePending = primaryGroup.invitations.filter(
+            (inv: PendingInvitation) => !activeEmails.has(inv.email.toLowerCase())
+          );
+          setPendingInvitations(truePending);
         }
 
         if (primaryGroup.exchanges && primaryGroup.exchanges.length > 0) {
@@ -264,6 +269,25 @@ export default function AdminPage() {
     } finally {
       setRemindingAll(false);
       setRemindingId(null);
+    }
+  };
+
+  // Delete / Cancel Invitation
+  const handleDeleteInvite = async (invitationId: string) => {
+    if (!confirm("Are you sure you want to remove this pending invitation?")) return;
+    try {
+      const res = await fetch(`/api/family/invite?id=${invitationId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setSuccess("Invitation removed.");
+        await loadData();
+      } else {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to remove invitation");
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to remove invitation");
     }
   };
 
@@ -908,6 +932,15 @@ export default function AdminPage() {
                             <Bell className="w-3 h-3" />
                           )}
                           <span>{isRemindingThis ? "..." : "Remind"}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteInvite(inv.id)}
+                          className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-red-950/30 transition"
+                          title="Cancel invitation"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
