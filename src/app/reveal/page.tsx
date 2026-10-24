@@ -414,7 +414,7 @@ export default function RevealPage() {
                         <a
                           href={item.url}
                           target="_blank"
-                          rel="noopener noreferrer"
+                          rel="noopener noreferrer sponsored"
                           className="px-4 py-1.5 rounded-lg bg-[#144534] hover:bg-[#1d5943] border border-[#d4af37]/40 text-xs text-[#f3c053] font-semibold transition shrink-0"
                         >
                           View Item Link &rarr;

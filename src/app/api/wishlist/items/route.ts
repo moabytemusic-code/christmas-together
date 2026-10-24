@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { Priority } from "@prisma/client";
+import { tagAmazonUrl } from "@/lib/affiliate";
 
 // POST add a new wish list item
 export async function POST(req: Request) {
@@ -31,12 +32,14 @@ export async function POST(req: Request) {
       });
     }
 
+    const processedUrl = url?.trim() ? tagAmazonUrl(url.trim()) : null;
+
     const item = await prisma.wishListItem.create({
       data: {
         wishListId: wishList.id,
         title: title.trim(),
         description: description?.trim(),
-        url: url?.trim(),
+        url: processedUrl,
         price: price ? parseFloat(price) : null,
         priority: priority as Priority,
       },

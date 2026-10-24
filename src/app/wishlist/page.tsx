@@ -330,7 +330,7 @@ export default function WishlistPage() {
                         <a
                           href={item.url}
                           target="_blank"
-                          rel="noopener noreferrer"
+                          rel="noopener noreferrer sponsored"
                           className="text-[#d4af37] hover:underline flex items-center space-x-1"
                         >
                           <span>Store Link</span>
