@@ -143,7 +143,20 @@ export default function AdminPage() {
         setMembers(mems);
 
         if (primaryGroup.exchanges && primaryGroup.exchanges.length > 0) {
-          setExchange(primaryGroup.exchanges[0]);
+          const currentEx = primaryGroup.exchanges[0];
+          // Directly fetch exclusions to guarantee latest list
+          try {
+            const exRes = await fetch(`/api/exchange/${currentEx.id}/exclusions`);
+            if (exRes.ok) {
+              const exData = await exRes.json();
+              if (Array.isArray(exData.exclusions)) {
+                currentEx.exclusions = exData.exclusions;
+              }
+            }
+          } catch {
+            // Keep currentEx.exclusions if already present
+          }
+          setExchange(currentEx);
         }
       }
 
@@ -303,7 +316,7 @@ export default function AdminPage() {
       setShowExclusionModal(false);
       setUserAId("");
       setUserBId("");
-      loadData();
+      await loadData();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to add exclusion");
     } finally {
@@ -319,7 +332,7 @@ export default function AdminPage() {
         method: "DELETE",
       });
       if (res.ok) {
-        loadData();
+        await loadData();
       }
     } catch {
       // Error
@@ -943,14 +956,18 @@ export default function AdminPage() {
                   className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
                 >
                   <option value="">Select participant...</option>
-                  {(exchange?.participants && exchange.participants.length > 0
-                    ? members.filter((m) => exchange.participants.some((p) => p.user.id === m.id && p.status === "CONFIRMED"))
-                    : members
-                  ).map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.email})
-                    </option>
-                  ))}
+                  {members
+                    .filter((m) => {
+                      const p = exchange?.participants?.find(
+                        (part) => (part.user?.id || (part as unknown as { userId?: string }).userId) === m.id
+                      );
+                      return !p || p.status !== "DECLINED";
+                    })
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.email})
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -966,11 +983,14 @@ export default function AdminPage() {
                   className="w-full px-3 py-2 rounded-lg bg-[#0b2b20] border border-[#1d5943] text-sm text-slate-100"
                 >
                   <option value="">Select participant...</option>
-                  {(exchange?.participants && exchange.participants.length > 0
-                    ? members.filter((m) => exchange.participants.some((p) => p.user.id === m.id && p.status === "CONFIRMED"))
-                    : members
-                  )
-                    .filter((m) => m.id !== userAId)
+                  {members
+                    .filter((m) => {
+                      if (m.id === userAId) return false;
+                      const p = exchange?.participants?.find(
+                        (part) => (part.user?.id || (part as unknown as { userId?: string }).userId) === m.id
+                      );
+                      return !p || p.status !== "DECLINED";
+                    })
                     .map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name} ({m.email})

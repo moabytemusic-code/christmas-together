@@ -57,23 +57,43 @@ export async function POST(
       return NextResponse.json({ error: "Cannot modify exclusions after drawing has taken place." }, { status: 400 });
     }
 
-    // Insert rule
-    const rule = await prisma.exclusionRule.upsert({
+    // Check if rule already exists in either direction
+    const existing = await prisma.exclusionRule.findFirst({
       where: {
-        exchangeId_userAId_userBId: {
+        exchangeId,
+        OR: [
+          { userAId, userBId },
+          { userAId: userBId, userBId: userAId },
+        ],
+      },
+    });
+
+    const cleanReason = typeof reason === "string" && reason.trim() ? reason.trim() : "Spouse / Partner";
+
+    let rule;
+    if (existing) {
+      rule = await prisma.exclusionRule.update({
+        where: { id: existing.id },
+        data: { reason: cleanReason },
+        include: {
+          userA: { select: { id: true, name: true, email: true } },
+          userB: { select: { id: true, name: true, email: true } },
+        },
+      });
+    } else {
+      rule = await prisma.exclusionRule.create({
+        data: {
           exchangeId,
           userAId,
           userBId,
+          reason: cleanReason,
         },
-      },
-      update: { reason },
-      create: {
-        exchangeId,
-        userAId,
-        userBId,
-        reason,
-      },
-    });
+        include: {
+          userA: { select: { id: true, name: true, email: true } },
+          userB: { select: { id: true, name: true, email: true } },
+        },
+      });
+    }
 
     return NextResponse.json({ success: true, rule });
   } catch (err: unknown) {

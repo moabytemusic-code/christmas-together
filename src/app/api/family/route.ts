@@ -30,6 +30,12 @@ export async function GET() {
                     user: { select: { id: true, name: true, email: true } },
                   },
                 },
+                exclusions: {
+                  include: {
+                    userA: { select: { id: true, name: true, email: true } },
+                    userB: { select: { id: true, name: true, email: true } },
+                  },
+                },
               },
             },
             invitations: {
